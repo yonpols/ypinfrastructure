@@ -1,0 +1,139 @@
+#!/usr/bin/php
+<?php
+    define('BASE_PATH', dirname(__FILE__));
+    define('LIB_PATH', realpath(BASE_PATH.DIRECTORY_SEPARATOR.'lib'));
+    define('LOG_PATH', realpath(BASE_PATH.DIRECTORY_SEPARATOR.'log'));
+    define('PKG_PATH', realpath(BASE_PATH.DIRECTORY_SEPARATOR.'pkg'));
+    define('TMP_PATH', realpath(BASE_PATH.DIRECTORY_SEPARATOR.'tmp'));
+
+    require LIB_PATH.'/sfYaml/sfYamlParser.php';
+    require LIB_PATH.'/installer/Logger.php';
+    require LIB_PATH.'/installer/Functions.php';
+    require LIB_PATH.'/installer/Package.php';
+
+    function help($exit_code = 0) {
+        printf("YPInfrastructure usage: \n");
+        printf("\typi install <package-path>    Install package\n");
+        printf("\typi uninstall <package-path>  Uninstall package\n");
+        printf("\typi list [type [name]]        List installed packages. Can be filtered by type\n");
+        printf("\t                              (application, framework, lib, plugin) and name\n");
+        printf("\typi help                      Shows this screen\n");
+        exit($exit_code);
+    }
+
+    Logger::initialize();
+
+    if (!isset($argv[1]))
+        help(1);
+
+    switch ($argv[1]) {
+        case 'install':
+
+            if (!isset($argv[2]))
+                help(1);
+
+            $fromPath = $argv[2];
+
+            if (substr($fromPath, 0, 6) == 'ssh://')
+                $tempPath = loadPackageFromSsh(substr($fromPath, 6));
+            elseif (substr($fromPath, 0, 6) == 'git://')
+                $tempPath = loadPackageFromGit(substr($fromPath, 6));
+            elseif (substr($fromPath, 0, 6) == 'ftp://')
+                $tempPath = loadPackageFromFtp(substr($fromPath, 6));
+            elseif (substr($fromPath, 0, 7) == 'file://')
+                $tempPath = substr($fromPath, 7);
+            else
+                $tempPath = $fromPath;
+
+            $package = Package::get($tempPath);
+            if (!$package) {
+                fprintf (STDERR, "Package not valid\n");
+                if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
+                    recursive_delete($tempPath);
+                    rmdir($tempPath);
+                }
+                exit(2);
+            }
+
+            if (!$package->checkDependencies($unmet)) {
+                fprintf (STDERR, "Package needs the following packages:\n");
+
+                foreach($unmet as $dep)
+                    fprintf (STDERR, "\t%s\n", $dep);
+
+                if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
+                    recursive_delete($tempPath);
+                    rmdir($tempPath);
+                }
+                exit(3);
+            }
+
+            if (!$package->install(true)) {
+                fprintf (STDERR, "Couldn't install package.\n");
+
+                if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
+                    recursive_delete($tempPath);
+                    rmdir($tempPath);
+                }
+                exit(4);
+            }
+
+            if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
+                recursive_delete($tempPath);
+                rmdir($tempPath);
+            }
+            exit(0);
+
+        case 'uninstall':
+            if (!isset($argv[2]))
+                help(1);
+
+            $package = Package::get($argv[2]);
+            if (!$package) {
+                fprintf (STDERR, "Package not valid\n");
+                exit(2);
+            }
+
+            if (!$package->uninstall()) {
+                fprintf (STDERR, "Couldn't uninstall package.\n");
+                exit(4);
+            }
+
+            exit(0);
+
+        case 'list':
+            $type = null;
+            $name = null;
+
+            if (isset($argv[2])) {
+                $type = $argv[2];
+                if (substr($type, -1) == 's')
+                    $type = substr ($type, 0, -1);
+
+                if (isset($argv[3]))
+                    $name = $argv[3];
+            }
+
+            $packages = Package::listAll($type, $name);
+
+            if ($type !== null) {
+                foreach ($packages as $name => $versions) {
+                    printf("%s: %s\n", $name, implode(', ', array_keys($versions)));
+                }
+            } else
+                foreach ($packages as $type => $names) {
+                    if (empty($names))
+                        continue;
+
+                    printf("%ss:\n", $type);
+                    foreach ($names as $name => $versions) {
+                        printf("  - %s: %s\n", $name, implode(', ', array_keys($versions)));
+                    }
+                }
+            exit(0);
+
+        case 'help':
+        default:
+            help();
+    }
+?>

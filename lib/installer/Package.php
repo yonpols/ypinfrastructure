@@ -1,7 +1,13 @@
 <?php
+    require 'ApplicationPackage.php';
+    require 'FrameworkPackage.php';
+    require 'LibPackage.php';
+    require 'PluginPackage.php';
 
     class Package
     {
+        public static $supportedTypes = array('application', 'lib', 'plugin', 'framework');
+
         private $type;
         private $name;
         private $version;
@@ -10,54 +16,91 @@
         private $dependencies;
         private $packageRoot;
 
-        public function __construct($packageRoot)
+        public static function listAll($type = null, $name = null, $min_version = null)
+        {
+            $packages = array();
+
+            if ($type === null)
+            {
+                foreach (Package::$supportedTypes as $type)
+                    $packages[$type] = self::listAll($type);
+            } else
+            if (array_search($type, Package::$supportedTypes) !== false) {
+                $typePath = PKG_PATH.DIRECTORY_SEPARATOR.$type.'s';
+
+                if ($name !== null) {
+                    if (is_dir($typePath.DIRECTORY_SEPARATOR.$name)) {
+                        $namePath = $typePath.DIRECTORY_SEPARATOR.$name;
+                        $dir2 = opendir($namePath);
+
+                        if ($dir2)
+
+                        $packages[$name] = array();
+                        while ($version = readdir($dir2)) {
+                            if ($version[0] == '.')
+                                continue;
+
+                            if (($min_version !== null) && (compareVersion($version, $min_version) < 0))
+                                continue;
+
+                            $packagePath = $namePath.DIRECTORY_SEPARATOR.$version;
+                            $packages[$name][$version] = Package::load($packagePath);
+                        }
+                        uksort($packages[$name], 'compareVersion');
+                    }
+                } else {
+                    $dir = opendir($typePath);
+                    while ($name = readdir($dir)) {
+                        if ($name[0] == '.')
+                            continue;
+
+                        $namePath = $typePath.DIRECTORY_SEPARATOR.$name;
+                        $dir2 = opendir($namePath);
+
+                        $packages[$name] = array();
+                        while ($version = readdir($dir2)) {
+                            if ($version[0] == '.')
+                                continue;
+
+                            $packagePath = $namePath.DIRECTORY_SEPARATOR.$version;
+                            $packages[$name][$version] = Package::load($packagePath);
+                        }
+                        uksort($packages[$name], 'compareVersion');
+                    }
+                }
+            }
+
+            return $packages;
+        }
+
+        public static function get($fromPath) {
+            if (is_file($fromPath)) {
+                $tempPath = getTempPath();
+                mkdir($tempPath);
+
+                $zip = new ZipArchive;
+                $res = $zip->open($fromPath);
+                if ($res === true) {
+                    $zip->extractTo($tempPath);
+                    $zip->close();
+                } else
+                    return false;
+
+                $fromPath = $tempPath;
+            }
+
+            $package = self::load($fromPath);
+            return $package;
+        }
+
+        protected function __construct($packageRoot, $config)
         {
             $this->packageRoot = $packageRoot;
 
-            $configFileName = realpath($packageRoot.DIRECTORY_SEPARATOR.'config.yml');
-            if (!is_file($configFileName))
-            {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml missing", $packageRoot));
-                return;
-            }
-
-            $yaml = new sfYamlParser();
-            try {
-                $config = $yaml->parse(file_get_contents($configFileName));
-            }
-            catch (InvalidArgumentException $e) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
-                return;
-            }
-
-            if (!isset($config['package'])) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
-                return;
-            }
-
-            if (!isset($config['package']['type'])) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not included in config.yml", $packageRoot));
-                return;
-            }
             $this->type = $config['package']['type'];
 
-            if (array_search($this->type, array('application', 'lib', 'plugin', 'framework')) === false) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not supported: %s", $packageRoot, $this->type));
-                return;
-            }
+            $this->version = normalizeVersion($config['package']['version']);
 
-            if (!isset($config['package']['version'])) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. Version of package not included in config.yml", $packageRoot));
-                return;
-            }
-            $this->version = explode('.', $config['package']['version']);
-            while (count($this->version) < 3)
-                $this->version[] = 0;
-
-            if (!isset($config['package']['name'])) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. Name of package not included in config.yml", $packageRoot));
-                return;
-            }
             $this->name = $config['package']['name'];
 
             if (isset($config['package']['author']))
@@ -94,30 +137,46 @@
             return $this->dependencies;
         }
 
-        public function install() {
+        public function install($skipDependencies = false) {
+            if (!$skipDependencies)
+                if (!$this->checkDependencies($unmet))
+                    return false;
+
             $path = PKG_PATH.DIRECTORY_SEPARATOR.$this->type.'s'.DIRECTORY_SEPARATOR.$this->name.DIRECTORY_SEPARATOR.implode('.', $this->version);
+            $update = false;
+
             if (is_dir($path)) {
-                Logger::log('ERROR', sprintf('Can not install %s package because path already exists: %s', $this->name, $path));
-                return false;
+                rename($path, $path.'_old');
+                $update = true;
             }
 
             if (!mkdir($path, 0777, true)) {
                 Logger::log('ERROR', sprintf('Can not install %s package. Directory %s could not be created.', $this->name, $path));
+                if ($update)
+                    rename($path.'_old', $path);
                 return false;
             }
 
-            if (!$this->copy($this->packageRoot, $path)) {
+            if (!recursive_copy($this->packageRoot, $path)) {
                 Logger::log('ERROR', sprintf('Can not install %s package. Error while copying files.', $this->name));
                 @`rm -r $path`;
+                if ($update)
+                    rename($path.'_old', $path);
                 return false;
             }
 
-            Logger::log('INFO', sprintf('Package %s installed on %s', $this->name, $path));
-            return true;
+            if ($update) {
+                recursive_delete($path.'_old');
+                rmdir($path.'_old');
+                Logger::log('INFO', sprintf('Package %s updated on %s', $this->name, $path));
+            } else
+                Logger::log('INFO', sprintf('Package %s installed on %s', $this->name, $path));
+
+            return $path;
         }
 
         public function uninstall() {
-            if (!$this->delete($this->packageRoot)) {
+            if (!recursive_delete($this->packageRoot)) {
                 Logger::log('ERROR', sprintf('Can not uninstall %s package. Error while deleting files.', $this->name));
                 return false;
             }
@@ -131,45 +190,93 @@
             return true;
         }
 
-        private function copy($from, $to) {
-            $dir = opendir($from);
-            $result = ($dir !== false);
-            while ($result && ($file = readdir($dir))) {
-                $pathFrom = $from . DIRECTORY_SEPARATOR . $file;
-                $pathTo = $to . DIRECTORY_SEPARATOR . $file;
+        public function checkDependencies(&$unmet) {
+            if (!is_array($this->dependencies))
+                return false;
 
-                if (($file == '.') || ($file == '..'))
-                    continue;
+            $unmet = array();
+            foreach ($this->dependencies as $type => $names)
+                foreach ($names as $name => $version) {
+                    if (substr($version, 0, 2) == '>=') {
+                        $mod = '>=';
+                        $version = normalizeVersion(trim(substr($version, 2)), true);
+                    }
+                    elseif (substr($version, 0, 1) == '>') {
+                        $mod = '>';
+                        $version = normalizeVersion(trim(substr($version, 1)));
+                        $version[2]++;
+                        $version = implode('.', $version);
+                    } else {
+                        $mod = '=';
+                        $version = normalizeVersion($version, true);
+                    }
 
-                if (is_dir($pathFrom)) {
-                    $result = $result && (mkdir($pathTo));
-                    $result = $result && $this->copy($pathFrom, $pathTo);
-                } else {
-                    $result = $result && (copy($pathFrom, $pathTo));
+                    $installed = self::listAll($type, $name, $version);
+
+                    if (empty($installed[$name])) {
+                        $unmet[] = sprintf('%s: "%s" %s%s', $type, $name, $mod, $version);
+                        continue;
+                    }
+
+                    if (($mod == '=') && !isset($installed[$name][$version])) {
+                        $unmet[] = sprintf('%s: "%s" %s%s', $type, $name, $mod, $version);
+                        continue;
+                    }
                 }
-            }
-
-            return $result;
+            return (empty($unmet));
         }
 
-        private function delete($from) {
-            $dir = opendir($from);
-            $result = ($dir !== false);
-            while ($result && ($file = readdir($dir))) {
-                $pathFrom = $from . DIRECTORY_SEPARATOR . $file;
-
-                if (($file == '.') || ($file == '..'))
-                    continue;
-
-                if (is_dir($pathFrom)) {
-                    $result = $result && $this->delete($pathFrom);
-                    $result = $result && (rmdir($pathFrom));
-                } else
-                    $result = $result && (unlink($pathFrom));
+        private static function load($packageRoot) {
+            $configFileName = realpath($packageRoot.DIRECTORY_SEPARATOR.'config.yml');
+            if (!is_file($configFileName))
+            {
+                Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml missing", $packageRoot));
+                return false;
             }
 
-            return $result;
+            $yaml = new sfYamlParser();
+            $config = null;
+            try {
+                $config = $yaml->parse(file_get_contents($configFileName));
+            }
+            catch (InvalidArgumentException $e) {
+                Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
+                return false;
+            }
+
+            if (!isset($config['package'])) {
+                Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
+                return false;
+            }
+
+            if (!isset($config['package']['type'])) {
+                Logger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not included in config.yml", $packageRoot));
+                return false;
+            }
+
+            if (array_search($config['package']['type'], self::$supportedTypes) === false) {
+                Logger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not supported: %s", $packageRoot, $this->type));
+                return false;
+            }
+
+            if (!isset($config['package']['version'])) {
+                Logger::log('ERROR', sprintf("%s does not point to a valid package. Version of package not included in config.yml", $packageRoot));
+                return false;
+            }
+
+            if (!isset($config['package']['name'])) {
+                Logger::log('ERROR', sprintf("%s does not point to a valid package. Name of package not included in config.yml", $packageRoot));
+                return false;
+            }
+
+            try {
+                $type = $config['package']['type'];
+                $class = strtoupper($type[0]).substr($type, 1).'Package';
+                $package = new $class($packageRoot, $config);
+                return $package;
+            } catch (Exception $e) {
+                return false;
+            }
         }
     }
-
 ?>
