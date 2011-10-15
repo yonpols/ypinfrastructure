@@ -49,8 +49,7 @@
             if (!$package) {
                 fprintf (STDERR, "Package not valid\n");
                 if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
-                    recursive_delete($tempPath);
-                    rmdir($tempPath);
+                    recursive_delete($tempPath, true);
                 }
                 exit(2);
             }
@@ -62,8 +61,7 @@
                     fprintf (STDERR, "\t%s\n", $dep);
 
                 if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
-                    recursive_delete($tempPath);
-                    rmdir($tempPath);
+                    recursive_delete($tempPath, true);
                 }
                 exit(3);
             }
@@ -72,16 +70,14 @@
                 fprintf (STDERR, "Couldn't install package.\n");
 
                 if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
-                    recursive_delete($tempPath);
-                    rmdir($tempPath);
+                    recursive_delete($tempPath, true);
                 }
                 exit(4);
             }
 
-            if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
-                recursive_delete($tempPath);
-                rmdir($tempPath);
-            }
+            if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH)
+                recursive_delete($tempPath, true);
+
             exit(0);
 
         case 'uninstall':

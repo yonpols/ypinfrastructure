@@ -1,8 +1,64 @@
 <?php
+    function underscore($string)
+    {
+        $result = '';
+
+        for ($i = 0; $i < strlen($string); $i++)
+        {
+            if (($i > 0) && (strpos('ABCDEFGHIJKLMNOPQRSTUVWXYZ', $string[$i]) !== false))
+                $result .= '_';
+
+            $result .= strtolower($string[$i]);
+        }
+
+        return $result;
+    }
+
+    function camelize($string, $firstUp = true)
+    {
+        $result = '';
+        $last = 0;
+
+        while (($pos = stripos($string, '_', $last)) !== false)
+        {
+            $portion = substr($string, $last, $pos-$last);
+            $result .= strtoupper($portion[0]).substr($portion, 1);
+            $last = $pos+1;
+        }
+        $portion = substr($string, $last);
+        $result .= strtoupper($portion[0]).substr($portion, 1);
+
+        if ($firstUp)
+            return strtoupper($result[0]).substr($result, 1);
+        else
+            return strtolower($result[0]).substr($result, 1);
+    }
+
+    function getFileName()
+    {
+        $filePath = '';
+
+        foreach (func_get_args() as $path)
+        {
+            if ($path == '')
+                continue;
+
+            if (substr($path, -1) != DIRECTORY_SEPARATOR)
+                $filePath .= $path . DIRECTORY_SEPARATOR;
+            else
+                $filePath .= $path;
+        }
+
+        if (substr($filePath, -1) == DIRECTORY_SEPARATOR)
+            return substr($filePath, 0, -1);
+        else
+            return $filePath;
+    }
+
     function getTempPath() {
         $i = time();
         do {
-            $path = TMP_PATH.DIRECTORY_SEPARATOR.'package-'.$i;
+            $path = getFileName(TMP_PATH, 'package-'.$i);
             $i++;
         } while(file_exists($path));
 
@@ -68,8 +124,8 @@
         $dir = opendir($from);
         $result = ($dir !== false);
         while ($result && ($file = readdir($dir))) {
-            $pathFrom = $from . DIRECTORY_SEPARATOR . $file;
-            $pathTo = $to . DIRECTORY_SEPARATOR . $file;
+            $pathFrom = getFileName($from, $file);
+            $pathTo = getFileName($to, $file);
 
             if (($file == '.') || ($file == '..'))
                 continue;
@@ -81,25 +137,30 @@
                 $result = $result && (copy($pathFrom, $pathTo));
             }
         }
+        closedir($dir);
 
         return $result;
     }
 
-    function recursive_delete($from) {
+    function recursive_delete($from, $deletePath = false) {
         $dir = opendir($from);
         $result = ($dir !== false);
         while ($result && ($file = readdir($dir))) {
-            $pathFrom = $from . DIRECTORY_SEPARATOR . $file;
+            $pathFrom = getFileName($from, $file);
 
             if (($file == '.') || ($file == '..'))
                 continue;
 
-            if (is_dir($pathFrom)) {
+            if (is_dir($pathFrom) && !is_link($pathFrom)) {
                 $result = $result && recursive_delete($pathFrom);
                 $result = $result && (rmdir($pathFrom));
             } else
                 $result = $result && (unlink($pathFrom));
         }
+        closedir($dir);
+
+        if ($deletePath && $result)
+            rmdir($from);
 
         return $result;
     }

@@ -1,9 +1,9 @@
 <?php
     class ApplicationPackage extends Package
     {
-        private $deployMode;
-        private $deployUrl;
-        private $deployInset;
+        protected $deployMode;
+        protected $deployUrl;
+        protected $deployInset;
 
         protected function __construct($packageRoot, $config) {
             parent::__construct($packageRoot, $config);
@@ -13,25 +13,16 @@
             }
         }
 
-        public function install() {
-            $path = parent::install();
-            if ($this->deployMode) {
-                $url = parse_url($this->deployUrl);
-                $contents = file($path.DIRECTORY_SEPARATOR.'www/.htaccess');
+        public function getDeployMode() {
+            return $this->deployMode;
+        }
 
-                if (!isset ($url['path']))
-                    $url['path'] = '';
+        public function getDeployUrl() {
+            return $this->deployUrl;
+        }
 
-                $fd = fopen($path.DIRECTORY_SEPARATOR.'www/.htaccess', 'w');
-                foreach ($contents as $line => $text)
-                    if (strpos($text, 'RewriteBase') !== false)
-                        fputs ($fd, sprintf("  RewriteBase %s/\n", $url['path']));
-                    else
-                        fputs ($fd, $text."\n");
-
-                fclose($fd);
-            }
-
+        public function getDeployInset() {
+            return $this->deployInset;
         }
     }
 ?>

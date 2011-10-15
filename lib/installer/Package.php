@@ -3,18 +3,20 @@
     require 'FrameworkPackage.php';
     require 'LibPackage.php';
     require 'PluginPackage.php';
+    require 'PackageInstaller.php';
 
     class Package
     {
         public static $supportedTypes = array('application', 'lib', 'plugin', 'framework');
 
-        private $type;
-        private $name;
-        private $version;
-        private $description;
-        private $author;
-        private $dependencies;
-        private $packageRoot;
+        protected $type;
+        protected $name;
+        protected $version;
+        protected $description;
+        protected $author;
+        protected $dependencies;
+        protected $installer;
+        protected $packageRoot;
 
         public static function listAll($type = null, $name = null, $min_version = null)
         {
@@ -26,11 +28,12 @@
                     $packages[$type] = self::listAll($type);
             } else
             if (array_search($type, Package::$supportedTypes) !== false) {
-                $typePath = PKG_PATH.DIRECTORY_SEPARATOR.$type.'s';
+
+                $typePath = getFileName(PKG_PATH, $type.'s');
 
                 if ($name !== null) {
-                    if (is_dir($typePath.DIRECTORY_SEPARATOR.$name)) {
-                        $namePath = $typePath.DIRECTORY_SEPARATOR.$name;
+                    $namePath = getFileName($typePath, $name);
+                    if (is_dir($namePath)) {
                         $dir2 = opendir($namePath);
 
                         if ($dir2)
@@ -43,10 +46,12 @@
                             if (($min_version !== null) && (compareVersion($version, $min_version) < 0))
                                 continue;
 
-                            $packagePath = $namePath.DIRECTORY_SEPARATOR.$version;
+                            $packagePath = getFileName($namePath, $version);
                             $packages[$name][$version] = Package::load($packagePath);
                         }
+
                         uksort($packages[$name], 'compareVersion');
+                        closedir($dir2);
                     }
                 } else {
                     $dir = opendir($typePath);
@@ -54,7 +59,7 @@
                         if ($name[0] == '.')
                             continue;
 
-                        $namePath = $typePath.DIRECTORY_SEPARATOR.$name;
+                        $namePath = getFileName($typePath, $name);
                         $dir2 = opendir($namePath);
 
                         $packages[$name] = array();
@@ -62,11 +67,13 @@
                             if ($version[0] == '.')
                                 continue;
 
-                            $packagePath = $namePath.DIRECTORY_SEPARATOR.$version;
+                            $packagePath = getFileName($namePath, $version);
                             $packages[$name][$version] = Package::load($packagePath);
                         }
                         uksort($packages[$name], 'compareVersion');
+                        closedir($dir2);
                     }
+                    closedir($dir);
                 }
             }
 
@@ -110,7 +117,10 @@
                 $this->description = $config['package']['description'];
 
             if (isset($config['package']['dependencies']))
-                $this->description = $config['package']['dependencies'];
+                $this->dependencies = $config['package']['dependencies'];
+
+            if (isset($config['package']['installer']))
+                $this->installer = $config['package']['installer'];
         }
 
         public function getType() {
@@ -142,7 +152,7 @@
                 if (!$this->checkDependencies($unmet))
                     return false;
 
-            $path = PKG_PATH.DIRECTORY_SEPARATOR.$this->type.'s'.DIRECTORY_SEPARATOR.$this->name.DIRECTORY_SEPARATOR.implode('.', $this->version);
+            $path = getFileName(PKG_PATH, $this->type.'s', $this->name, implode('.', $this->version));
             $update = false;
 
             if (is_dir($path)) {
@@ -159,10 +169,43 @@
 
             if (!recursive_copy($this->packageRoot, $path)) {
                 Logger::log('ERROR', sprintf('Can not install %s package. Error while copying files.', $this->name));
-                @`rm -r $path`;
+                recursive_delete($path, true);
                 if ($update)
                     rename($path.'_old', $path);
                 return false;
+            }
+
+            if ($this->dependencies) {
+                foreach ($this->dependencies as $type => $names)
+                    foreach ($names as $name => $version)
+                    {
+                        $path = getFileName(PKG_PATH, $type.'s', $name, $version);
+                        $package = Package::get($path);
+                        if (!$package) {
+                            Logger::log('ERROR', sprintf('Can not install dependency %s', $name));
+                            recursive_delete($path, true);
+                            if ($update)
+                                rename($path.'_old', $path);
+                            return false;
+                        }
+
+                        if (!$package->configureTo($this, $path)) {
+                            Logger::log('ERROR', sprintf('Can not install dependency %s', $name));
+                            recursive_delete($path, true);
+                            if ($update)
+                                rename($path.'_old', $path);
+                            return false;
+                        }
+                    }
+            }
+
+            if (($installer = $this->getInstallerInstance($path)) !== false) {
+                if (!$installer->install($path)) {
+                    recursive_delete($path, true);
+                    if ($update)
+                        rename($path.'_old', $path);
+                    return false;
+                }
             }
 
             if ($update) {
@@ -176,6 +219,11 @@
         }
 
         public function uninstall() {
+            if (($installer = $this->getInstallerInstance()) !== false) {
+                if (!$installer->uninstall())
+                    return false;
+            }
+
             if (!recursive_delete($this->packageRoot)) {
                 Logger::log('ERROR', sprintf('Can not uninstall %s package. Error while deleting files.', $this->name));
                 return false;
@@ -192,7 +240,7 @@
 
         public function checkDependencies(&$unmet) {
             if (!is_array($this->dependencies))
-                return false;
+                return true;
 
             $unmet = array();
             foreach ($this->dependencies as $type => $names)
@@ -226,8 +274,33 @@
             return (empty($unmet));
         }
 
+        public function configureTo($package, $packagePath) {
+            if (($installer = $this->getInstallerInstance()) !== false)
+                return $installer->configureTo($package, $packagePath);
+
+            return true;
+        }
+
+        protected function getInstallerInstance($packageRoot = null) {
+            if ($this->installer) {
+                if ($packageRoot === null)
+                    $packageRoot = $this->packageRoot;
+
+                $installerPath = getFileName($this->packageRoot, $this->installer);
+                if (is_file($installerPath)) {
+                    require_once $installerPath;
+                    $className = camelize($this->name.'_installer');
+
+                    if (class_exists($className))
+                        return new $className($this);
+                }
+            }
+
+            return false;
+        }
+
         private static function load($packageRoot) {
-            $configFileName = realpath($packageRoot.DIRECTORY_SEPARATOR.'config.yml');
+            $configFileName = getFileName($packageRoot, 'config.yml');
             if (!is_file($configFileName))
             {
                 Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml missing", $packageRoot));
