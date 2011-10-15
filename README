@@ -1,0 +1,13 @@
+YPInfrastructure
+================
+
+Requirements:
+    php 5
+    zip & unzip commands
+
+Installation:
+    mkdir ~/.ypi
+    cd ~/.ypi
+    git clone git://github.com/yonpols/ypinfrastructure.git
+    echo 'export PATH=$PATH:~ypi/bin' >> ~/.bashrc
+    source ~/.bashrc

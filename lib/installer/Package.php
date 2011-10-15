@@ -85,13 +85,11 @@
                 $tempPath = getTempPath();
                 mkdir($tempPath);
 
-                $zip = new ZipArchive;
-                $res = $zip->open($fromPath);
-                if ($res === true) {
-                    $zip->extractTo($tempPath);
-                    $zip->close();
-                } else
+                system(sprintf('unzip "%s" -d "%s"', $fromPath, $tempPath), $result);
+                if ($result != 0) {
+                    recursive_delete($tempPath, true);
                     return false;
+                } 
 
                 $fromPath = $tempPath;
             }
@@ -145,6 +143,10 @@
 
         public function getDependencies() {
             return $this->dependencies;
+        }
+
+        public function getPackageRoot() {
+            return $this->packageRoot;
         }
 
         public function install($skipDependencies = false) {
