@@ -83,6 +83,10 @@
         case 'uninstall':
             if (!isset($argv[2]))
                 help(1);
+/* TODO
+ * Determinar si un paquete a desinstalar tiene dependientes y en ese caso impedir
+ * la desinstalación.
+ */
 
             $package = Package::get($argv[2]);
             if (!$package) {
