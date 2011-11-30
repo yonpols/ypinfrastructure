@@ -1,9 +1,9 @@
 <?php
-    require './YPIApplicationPackage.php';
-    require './YPIFrameworkPackage.php';
-    require './YPILibPackage.php';
-    require './YPIPluginPackage.php';
-    require './YPIPackageInstaller.php';
+    require 'YPIApplicationPackage.php';
+    require 'YPIFrameworkPackage.php';
+    require 'YPILibPackage.php';
+    require 'YPIPluginPackage.php';
+    require 'YPIPackageInstaller.php';
 
     class YPIPackage
     {
