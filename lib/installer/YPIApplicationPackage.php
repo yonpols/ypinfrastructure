@@ -1,5 +1,5 @@
 <?php
-    class ApplicationPackage extends Package
+    class YPIApplicationPackage extends YPIPackage
     {
         protected $deployMode;
         protected $deployUrl;

@@ -1,11 +1,11 @@
 <?php
-    require 'ApplicationPackage.php';
-    require 'FrameworkPackage.php';
-    require 'LibPackage.php';
-    require 'PluginPackage.php';
-    require 'PackageInstaller.php';
+    require './YPIApplicationPackage.php';
+    require './YPIFrameworkPackage.php';
+    require './YPILibPackage.php';
+    require './YPIPluginPackage.php';
+    require './YPIPackageInstaller.php';
 
-    class Package
+    class YPIPackage
     {
         public static $supportedTypes = array('application', 'lib', 'plugin', 'framework');
 
@@ -24,10 +24,10 @@
 
             if ($type === null)
             {
-                foreach (Package::$supportedTypes as $type)
+                foreach (YPIPackage::$supportedTypes as $type)
                     $packages[$type] = self::listAll($type);
             } else
-            if (array_search($type, Package::$supportedTypes) !== false) {
+            if (array_search($type, YPIPackage::$supportedTypes) !== false) {
 
                 $typePath = getFileName(PKG_PATH, $type.'s');
 
@@ -47,7 +47,7 @@
                                 continue;
 
                             $packagePath = getFileName($namePath, $version);
-                            $packages[$name][$version] = Package::load($packagePath);
+                            $packages[$name][$version] = YPIPackage::load($packagePath);
                         }
 
                         uksort($packages[$name], 'compareVersion');
@@ -68,7 +68,7 @@
                                 continue;
 
                             $packagePath = getFileName($namePath, $version);
-                            $packages[$name][$version] = Package::load($packagePath);
+                            $packages[$name][$version] = YPIPackage::load($packagePath);
                         }
                         uksort($packages[$name], 'compareVersion');
                         closedir($dir2);
@@ -89,7 +89,7 @@
                 if ($result != 0) {
                     recursive_delete($tempPath, true);
                     return false;
-                } 
+                }
 
                 $fromPath = $tempPath;
             }
@@ -163,14 +163,14 @@
             }
 
             if (!mkdir($path, 0777, true)) {
-                Logger::log('ERROR', sprintf('Can not install %s package. Directory %s could not be created.', $this->name, $path));
+                YPILogger::log('ERROR', sprintf('Can not install %s package. Directory %s could not be created.', $this->name, $path));
                 if ($update)
                     rename($path.'_old', $path);
                 return false;
             }
 
             if (!recursive_copy($this->packageRoot, $path)) {
-                Logger::log('ERROR', sprintf('Can not install %s package. Error while copying files.', $this->name));
+                YPILogger::log('ERROR', sprintf('Can not install %s package. Error while copying files.', $this->name));
                 recursive_delete($path, true);
                 if ($update)
                     rename($path.'_old', $path);
@@ -182,9 +182,9 @@
                     foreach ($names as $name => $version)
                     {
                         $path = getFileName(PKG_PATH, $type.'s', $name, $version);
-                        $package = Package::get($path);
+                        $package = YPIPackage::get($path);
                         if (!$package) {
-                            Logger::log('ERROR', sprintf('Can not install dependency %s', $name));
+                            YPILogger::log('ERROR', sprintf('Can not install dependency %s', $name));
                             recursive_delete($path, true);
                             if ($update)
                                 rename($path.'_old', $path);
@@ -192,7 +192,7 @@
                         }
 
                         if (!$package->configureTo($this, $path)) {
-                            Logger::log('ERROR', sprintf('Can not install dependency %s', $name));
+                            YPILogger::log('ERROR', sprintf('Can not install dependency %s', $name));
                             recursive_delete($path, true);
                             if ($update)
                                 rename($path.'_old', $path);
@@ -213,9 +213,9 @@
             if ($update) {
                 recursive_delete($path.'_old');
                 rmdir($path.'_old');
-                Logger::log('INFO', sprintf('Package %s updated on %s', $this->name, $path));
+                YPILogger::log('INFO', sprintf('Package %s updated on %s', $this->name, $path));
             } else
-                Logger::log('INFO', sprintf('Package %s installed on %s', $this->name, $path));
+                YPILogger::log('INFO', sprintf('Package %s installed on %s', $this->name, $path));
 
             return $path;
         }
@@ -227,16 +227,16 @@
             }
 
             if (!recursive_delete($this->packageRoot)) {
-                Logger::log('ERROR', sprintf('Can not uninstall %s package. Error while deleting files.', $this->name));
+                YPILogger::log('ERROR', sprintf('Can not uninstall %s package. Error while deleting files.', $this->name));
                 return false;
             }
 
             if (!rmdir($this->packageRoot)) {
-                Logger::log('ERROR', sprintf('Can not uninstall %s package. Error while deleting package root directory.', $this->name));
+                YPILogger::log('ERROR', sprintf('Can not uninstall %s package. Error while deleting package root directory.', $this->name));
                 return false;
             }
 
-            Logger::log('INFO', sprintf('Package %s uninstalled', $this->name));
+            YPILogger::log('INFO', sprintf('Package %s uninstalled', $this->name));
             return true;
         }
 
@@ -305,7 +305,7 @@
             $configFileName = getFileName($packageRoot, 'config.yml');
             if (!is_file($configFileName))
             {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml missing", $packageRoot));
+                YPILogger::log('ERROR', sprintf("%s does not point to a valid package. config.yml missing", $packageRoot));
                 return false;
             }
 
@@ -315,38 +315,38 @@
                 $config = $yaml->parse(file_get_contents($configFileName));
             }
             catch (InvalidArgumentException $e) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
+                YPILogger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
                 return false;
             }
 
             if (!isset($config['package'])) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
+                YPILogger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
                 return false;
             }
 
             if (!isset($config['package']['type'])) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not included in config.yml", $packageRoot));
+                YPILogger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not included in config.yml", $packageRoot));
                 return false;
             }
 
             if (array_search($config['package']['type'], self::$supportedTypes) === false) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not supported: %s", $packageRoot, $this->type));
+                YPILogger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not supported: %s", $packageRoot, $this->type));
                 return false;
             }
 
             if (!isset($config['package']['version'])) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. Version of package not included in config.yml", $packageRoot));
+                YPILogger::log('ERROR', sprintf("%s does not point to a valid package. Version of package not included in config.yml", $packageRoot));
                 return false;
             }
 
             if (!isset($config['package']['name'])) {
-                Logger::log('ERROR', sprintf("%s does not point to a valid package. Name of package not included in config.yml", $packageRoot));
+                YPILogger::log('ERROR', sprintf("%s does not point to a valid package. Name of package not included in config.yml", $packageRoot));
                 return false;
             }
 
             try {
                 $type = $config['package']['type'];
-                $class = strtoupper($type[0]).substr($type, 1).'Package';
+                $class = 'YPI'.strtoupper($type[0]).substr($type, 1).'Package';
                 $package = new $class($packageRoot, $config);
                 return $package;
             } catch (Exception $e) {

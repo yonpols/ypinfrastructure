@@ -7,22 +7,30 @@
     define('TMP_PATH', realpath(BIN_PATH.'/../tmp'));
 
     require LIB_PATH.'/sfYaml/sfYamlParser.php';
-    require LIB_PATH.'/installer/Logger.php';
-    require LIB_PATH.'/installer/Functions.php';
-    require LIB_PATH.'/installer/Package.php';
+    require LIB_PATH.'/installer/functions.php';
+    require LIB_PATH.'/installer/YPILogger.php';
+    require LIB_PATH.'/installer/YPIPackage.php';
 
     function help($exit_code = 0) {
-        printf("YPInfrastructure usage: \n");
-        printf("\typi install <package-path>      Install package\n");
-        printf("\typi uninstall <package-path>    Uninstall package\n");
-        printf("\typi list [type [name]]          List installed packages. Can be filtered by type\n");
-        printf("\t                                (application, framework, lib, plugin) and name\n");
-        printf("\typi package [filename]          Create single file package\n");
-        printf("\typi help                        Shows this screen\n");
+        echo "YPInfrastructure usage: \n";
+        echo "\typi install <package-path>      Install package\n";
+        echo "\typi uninstall <package-path>    Uninstall package\n";
+        echo "\typi list [type [name]]          List installed packages. Can be filtered by type\n";
+        echo "\t                                (application, framework, lib, plugin) and name\n";
+        echo "\typi package [filename]          Create single file package\n";
+        echo "\typi iterate [--to <version>|--add <version-unit>|--delete <version-unit>]\n";
+        echo "\tChanges version of package. If no argument is passed, it increments\n";
+        echo "\tbuild number\n";
+        echo "\t      --to <version>            Changes version to version specified\n";
+        echo "\t      --add <version-unit>      Adds the amount specified by version-unit\n";
+        echo "\t      --delete <version-unit>   Substracts the amount specified by version-unit\n";
+        echo "\t      version-unit = number(v,s,b) v:version, s:subversion, b:build number\n";
+        echo "\t      ej: 1v\n";
+        echo "\typi help                        Shows this screen\n";
         exit($exit_code);
     }
 
-    Logger::initialize();
+    YPILogger::initialize();
 
     if (!isset($argv[1]))
         help(1);
@@ -32,8 +40,8 @@
             if (!isset($argv[2]))
                 help(1);
 
+            //Get package from different sources
             $fromPath = $argv[2];
-
             if (substr($fromPath, 0, 6) == 'ssh://')
                 $tempPath = loadPackageFromSsh(substr($fromPath, 6));
             elseif (substr($fromPath, 0, 6) == 'git://')
@@ -45,7 +53,8 @@
             else
                 $tempPath = $fromPath;
 
-            $package = Package::get($tempPath);
+            //Load package
+            $package = YPIPackage::get($tempPath);
             if (!$package) {
                 fprintf (STDERR, "Package not valid\n");
                 if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
@@ -54,6 +63,7 @@
                 exit(2);
             }
 
+            //Check if package dependencies are all met
             if (!$package->checkDependencies($unmet)) {
                 fprintf (STDERR, "Package needs the following packages:\n");
 
@@ -88,7 +98,7 @@
  * la desinstalación.
  */
 
-            $package = Package::get($argv[2]);
+            $package = YPIPackage::get($argv[2]);
             if (!$package) {
                 fprintf (STDERR, "Package not valid\n");
                 exit(2);
@@ -114,7 +124,7 @@
                     $name = $argv[3];
             }
 
-            $packages = Package::listAll($type, $name);
+            $packages = YPIPackage::listAll($type, $name);
 
             if ($type !== null) {
                 foreach ($packages as $name => $versions) {
@@ -133,7 +143,7 @@
             exit(0);
 
         case 'package':
-            $package = Package::get(realpath('.'));
+            $package = YPIPackage::get(realpath('.'));
             if (!$package) {
                 fprintf (STDERR, "Package not valid\n");
                 exit(2);
@@ -153,6 +163,16 @@
                 fprintf (STDERR, "Couldn't create package.\n");
                 exit(4);
             }
+            exit(0);
+
+        case 'iterate':
+            $package = YPIPackage::get(realpath('.'));
+            if (!$package) {
+                fprintf (STDERR, "Package not valid\n");
+                exit(2);
+            }
+
+            throw new Exception('implement');
             exit(0);
 
         case 'help':

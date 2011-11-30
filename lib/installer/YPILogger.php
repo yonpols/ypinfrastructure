@@ -1,5 +1,5 @@
 <?php
-    class Logger
+    class YPILogger
     {
         private static $log = array();
         private static $logFileName = null;

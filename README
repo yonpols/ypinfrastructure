@@ -2,7 +2,7 @@ YPInfrastructure
 ================
 
 Requirements:
-    php 5
+    php 5.3
     zip & unzip commands
 
 Installation:
