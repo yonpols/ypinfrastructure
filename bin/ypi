@@ -26,6 +26,7 @@
         echo "\t      --delete <version-unit>   Substracts the amount specified by version-unit\n";
         echo "\t      version-unit = number(v,s,b) v:version, s:subversion, b:build number\n";
         echo "\t      ej: 1v\n";
+        echo "\typi info                        Shows information about the package on current directory\n";
         echo "\typi help                        Shows this screen\n";
         exit($exit_code);
     }
@@ -33,7 +34,7 @@
     YPILogger::initialize();
 
     if (!isset($argv[1]))
-        help(1);
+        $argv[] = 'info';
 
     switch ($argv[1]) {
         case 'install':
@@ -172,11 +173,72 @@
                 exit(2);
             }
 
-            throw new Exception('implement');
+            if (!isset($argv[2]))
+                $result = $package->versionAdd('0.0.1');
+            elseif (!isset($argv[3])) {
+                help();
+                exit(1);
+            } elseif ($argv[2] == '--to') {
+                if (!preg_match('/[0-9]+(\\.[0-9]+(\\.[0-9]+)?)?/', $argv[3])) {
+                    fprintf (STDERR, "Bad version number\n");
+                    exit(1);
+                }
+                $result = $package->versionTo($argv[3]);
+            } elseif ($argv[2] == '--add') {
+                if (!preg_match('/([0-9]+)(v|s|b)/', $argv[3], $match)) {
+                    fprintf (STDERR, "Bad increment value\n");
+                    exit(1);
+                }
+
+                if ($match[2] == 'v')
+                    $result = $package->versionAdd('1.0.0');
+                elseif ($match[2] == 's')
+                    $result = $package->versionAdd('0.1.0');
+                else
+                    $result = $package->versionAdd('0.0.1');
+            } elseif ($argv[2] == '--delete') {
+                if (!preg_match('/([0-9]+)(v|s|b)/', $argv[3], $match)) {
+                    fprintf (STDERR, "Bad decrement value\n");
+                    exit(1);
+                }
+
+                if ($match[2] == 'v')
+                    $result = $package->versionDelete('1.0.0');
+                elseif ($match[2] == 's')
+                    $result = $package->versionDelete('0.1.0');
+                else
+                    $result = $package->versionDelete('0.0.1');
+            } else {
+                help();
+                exit(1);
+            }
+
+            if (!$result) {
+                fprintf (STDERR, "Couldn't change version of package.\n");
+                exit(4);
+            }
             exit(0);
 
-        case 'help':
+        case 'info':
+            $package = YPIPackage::get(realpath('.'));
+            if (!$package) {
+                fprintf (STDERR, "Package not valid\n");
+                exit(2);
+            }
+
+            printf("Package: %s\n", $package->getName());
+            if ($package->getDescription())
+                printf("%s\n", $package->getDescription());
+
+            printf("\ttype: %s\n", $package->getType());
+            printf("\tversion: %s\n", implode('.', $package->getVersion()));
+            printf("\tauthor: %s\n", $package->getAuthor());
+            exit(0);
+
         default:
+        case 'help':
             help();
+            exit(0);
+
     }
 ?>

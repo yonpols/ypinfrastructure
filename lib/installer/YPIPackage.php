@@ -98,8 +98,7 @@
             return $package;
         }
 
-        protected function __construct($packageRoot, $config)
-        {
+        protected function __construct($packageRoot, $config) {
             $this->packageRoot = $packageRoot;
 
             $this->type = $config['package']['type'];
@@ -281,6 +280,53 @@
                 return $installer->configureTo($package, $packagePath);
 
             return true;
+        }
+
+        public function versionAdd($version) {
+            $version = normalizeVersion($version);
+            $this->version[0] += $version[0];
+            $this->version[1] += $version[1];
+            $this->version[2] += $version[2];
+
+            return $this->versionTo(implode('.', $this->version));
+        }
+
+        public function versionDelete($version) {
+            $version = normalizeVersion($version);
+            $this->version[0] -= $version[0];
+            $this->version[1] -= $version[1];
+            $this->version[2] -= $version[2];
+
+            if (($this->version[0]<0) || ($this->version[1]<0) || ($this->version[2]<0))
+                return false;
+
+            return $this->versionTo(implode('.', $this->version));
+        }
+
+        public function versionTo($version) {
+            $this->version = normalizeVersion($version);
+
+            $configFileName = getFileName($this->packageRoot, 'config.yml');
+            if (!is_file($configFileName))
+            {
+                YPILogger::log('ERROR', sprintf("%s does not point to a valid package. config.yml missing", $packageRoot));
+                return false;
+            }
+
+            $yaml = new sfYamlParser();
+            $config = null;
+            try {
+                $config = $yaml->parse(file_get_contents($configFileName));
+            }
+            catch (InvalidArgumentException $e) {
+                YPILogger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
+                return false;
+            }
+            require LIB_PATH.'/sfYaml/sfYamlDumper.php';
+
+            $config['package']['version'] = implode('.', $this->version);
+            $yaml = new sfYamlDumper;
+            return (file_put_contents($configFileName, $yaml->dump($config, 5)) !== false);
         }
 
         protected function getInstallerInstance($packageRoot = null) {
