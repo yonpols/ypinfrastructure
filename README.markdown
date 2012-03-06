@@ -10,11 +10,11 @@ Package mananger to work with YPFramework and YPFramework based applications
 
 If you want to install **ypi** on your user home (recommended) do the following:
 
-`bash -s < <(curl -s https://github.com/yonpols/ypinfrastructure/raw/master/install.sh )`
+`bash < <(curl -s https://raw.github.com/yonpols/ypinfrastructure/master/install.sh )`
 
 If you want to install **ypi** on your system do the following:
 
-`bash -s global < <(curl -s https://github.com/yonpols/ypinfrastructure/raw/master/install.sh )`
+`bash -s global < <(curl -s https://raw.github.com/yonpols/ypinfrastructure/master/install.sh )`
 
 **Note:** Remember to include $INST_PATH/lib on your php include settings if you want to use
 ypi libraries.
