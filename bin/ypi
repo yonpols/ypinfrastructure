@@ -5,240 +5,38 @@
     define('LOG_PATH', realpath(BIN_PATH.'/../log'));
     define('PKG_PATH', realpath(BIN_PATH.'/../pkg'));
     define('TMP_PATH', realpath(BIN_PATH.'/../tmp'));
+    define('DB_PATH' , BIN_PATH.'/../db');
 
     require LIB_PATH.'/sfYaml/sfYamlParser.php';
     require LIB_PATH.'/installer/functions.php';
     require LIB_PATH.'/installer/YPILogger.php';
     require LIB_PATH.'/installer/YPIPackage.php';
+    require LIB_PATH.'/installer/YPICommand.php';
 
-    function help($exit_code = 0) {
-        echo "YPInfrastructure usage: \n";
-        echo "\typi install <package-path>      Install package\n";
-        echo "\typi uninstall <package-path>    Uninstall package\n";
-        echo "\typi list [type [name]]          List installed packages. Can be filtered by type\n";
-        echo "\t                                (application, framework, lib, plugin) and name\n";
-        echo "\typi package [filename]          Create single file package\n";
-        echo "\typi iterate [--to <version>|--add <version-unit>|--delete <version-unit>]\n";
-        echo "\tChanges version of package. If no argument is passed, it increments\n";
-        echo "\tbuild number\n";
-        echo "\t      --to <version>            Changes version to version specified\n";
-        echo "\t      --add <version-unit>      Adds the amount specified by version-unit\n";
-        echo "\t      --delete <version-unit>   Substracts the amount specified by version-unit\n";
-        echo "\t      version-unit = number(v,s,b) v:version, s:subversion, b:build number\n";
-        echo "\t      ej: 1v\n";
-        echo "\typi info                        Shows information about the package on current directory\n";
-        echo "\typi help                        Shows this screen\n";
-        exit($exit_code);
+    function php_error_handler($code, $error) {
+        YPILogger::log('ERROR:PHP', sprintf("%d: %s", $code, $error));
     }
 
     YPILogger::initialize();
 
-    if (!isset($argv[1]))
-        $argv[] = 'info';
+    set_error_handler('php_error_handler');
 
-    switch ($argv[1]) {
-        case 'install':
-            if (!isset($argv[2]))
-                help(1);
+    function run_command($name, $parameters = array()) {
+        $command = YPICommand::get($name);
+        if ($command === false)
+            die ("invalid ypf installation\n");
 
-            //Get package from different sources
-            $fromPath = $argv[2];
-            if (substr($fromPath, 0, 6) == 'ssh://')
-                $tempPath = loadPackageFromSsh(substr($fromPath, 6));
-            elseif (substr($fromPath, 0, 6) == 'git://')
-                $tempPath = loadPackageFromGit(substr($fromPath, 6));
-            elseif (substr($fromPath, 0, 6) == 'ftp://')
-                $tempPath = loadPackageFromFtp(substr($fromPath, 6));
-            elseif (substr($fromPath, 0, 7) == 'file://')
-                $tempPath = substr($fromPath, 7);
-            else
-                $tempPath = $fromPath;
+        $result = $command->run($parameters);
 
-            //Load package
-            $package = YPIPackage::get($tempPath);
-            if (!$package) {
-                fprintf (STDERR, "Package not valid\n");
-                if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
-                    recursive_delete($tempPath, true);
-                }
-                exit(2);
-            }
+        exit($result);
+    }
 
-            //Check if package dependencies are all met
-            if (!$package->checkDependencies($unmet)) {
-                fprintf (STDERR, "Package needs the following packages:\n");
-
-                foreach($unmet as $dep)
-                    fprintf (STDERR, "\t%s\n", $dep);
-
-                if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
-                    recursive_delete($tempPath, true);
-                }
-                exit(3);
-            }
-
-            if (!$package->install(true)) {
-                fprintf (STDERR, "Couldn't install package.\n");
-
-                if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH) {
-                    recursive_delete($tempPath, true);
-                }
-                exit(4);
-            }
-
-            if (substr($tempPath, 0, strlen(TMP_PATH)) == TMP_PATH)
-                recursive_delete($tempPath, true);
-
-            exit(0);
-
-        case 'uninstall':
-            if (!isset($argv[2]))
-                help(1);
-/* TODO
- * Determinar si un paquete a desinstalar tiene dependientes y en ese caso impedir
- * la desinstalación.
- */
-
-            $package = YPIPackage::get($argv[2]);
-            if (!$package) {
-                fprintf (STDERR, "Package not valid\n");
-                exit(2);
-            }
-
-            if (!$package->uninstall()) {
-                fprintf (STDERR, "Couldn't uninstall package.\n");
-                exit(4);
-            }
-
-            exit(0);
-
-        case 'list':
-            $type = null;
-            $name = null;
-
-            if (isset($argv[2])) {
-                $type = $argv[2];
-                if (substr($type, -1) == 's')
-                    $type = substr ($type, 0, -1);
-
-                if (isset($argv[3]))
-                    $name = $argv[3];
-            }
-
-            $packages = YPIPackage::listAll($type, $name);
-
-            if ($type !== null) {
-                foreach ($packages as $name => $versions) {
-                    printf("%s: %s\n", $name, implode(', ', array_keys($versions)));
-                }
-            } else
-                foreach ($packages as $type => $names) {
-                    if (empty($names))
-                        continue;
-
-                    printf("%ss:\n", $type);
-                    foreach ($names as $name => $versions) {
-                        printf("  - %s: %s\n", $name, implode(', ', array_keys($versions)));
-                    }
-                }
-            exit(0);
-
-        case 'package':
-            $package = YPIPackage::get(realpath('.'));
-            if (!$package) {
-                fprintf (STDERR, "Package not valid\n");
-                exit(2);
-            }
-
-            if (isset($argv[2])) {
-                if (is_dir($argv[2]))
-                    $packageFile = getFileName($argv[2], $package->getName().'-'.implode('.', $package->getVersion()).'.ypp');
-                else
-                    $packageFile = $argv[2];
-            } else
-                $packageFile = getFileName(realpath('.'), $package->getName().'-'.implode('.', $package->getVersion()).'.ypp');
-
-            $tempFile = getTempPath().'.zip';
-            system(sprintf('zip -r9 "%s" .', $tempFile), $result);
-            if (($result != 0) || !rename ($tempFile, $packageFile)) {
-                fprintf (STDERR, "Couldn't create package.\n");
-                exit(4);
-            }
-            exit(0);
-
-        case 'iterate':
-            $package = YPIPackage::get(realpath('.'));
-            if (!$package) {
-                fprintf (STDERR, "Package not valid\n");
-                exit(2);
-            }
-
-            if (!isset($argv[2]))
-                $result = $package->versionAdd('0.0.1');
-            elseif (!isset($argv[3])) {
-                help();
-                exit(1);
-            } elseif ($argv[2] == '--to') {
-                if (!preg_match('/[0-9]+(\\.[0-9]+(\\.[0-9]+)?)?/', $argv[3])) {
-                    fprintf (STDERR, "Bad version number\n");
-                    exit(1);
-                }
-                $result = $package->versionTo($argv[3]);
-            } elseif ($argv[2] == '--add') {
-                if (!preg_match('/([0-9]+)(v|s|b)/', $argv[3], $match)) {
-                    fprintf (STDERR, "Bad increment value\n");
-                    exit(1);
-                }
-
-                if ($match[2] == 'v')
-                    $result = $package->versionAdd('1.0.0');
-                elseif ($match[2] == 's')
-                    $result = $package->versionAdd('0.1.0');
-                else
-                    $result = $package->versionAdd('0.0.1');
-            } elseif ($argv[2] == '--delete') {
-                if (!preg_match('/([0-9]+)(v|s|b)/', $argv[3], $match)) {
-                    fprintf (STDERR, "Bad decrement value\n");
-                    exit(1);
-                }
-
-                if ($match[2] == 'v')
-                    $result = $package->versionDelete('1.0.0');
-                elseif ($match[2] == 's')
-                    $result = $package->versionDelete('0.1.0');
-                else
-                    $result = $package->versionDelete('0.0.1');
-            } else {
-                help();
-                exit(1);
-            }
-
-            if (!$result) {
-                fprintf (STDERR, "Couldn't change version of package.\n");
-                exit(4);
-            }
-            exit(0);
-
-        case 'info':
-            $package = YPIPackage::get(realpath('.'));
-            if (!$package) {
-                fprintf (STDERR, "Package not valid\n");
-                exit(2);
-            }
-
-            printf("Package: %s\n", $package->getName());
-            if ($package->getDescription())
-                printf("%s\n", $package->getDescription());
-
-            printf("\ttype: %s\n", $package->getType());
-            printf("\tversion: %s\n", implode('.', $package->getVersion()));
-            printf("\tauthor: %s\n", $package->getAuthor());
-            exit(0);
-
-        default:
-        case 'help':
-            help();
-            exit(0);
-
+    if ($argc < 2)
+        run_command('info');
+    else {
+        $parameters = $argv;
+        array_shift($parameters);
+        $name = array_shift($parameters);
+        run_command($name, $parameters);
     }
 ?>

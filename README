@@ -9,5 +9,8 @@ Installation:
     mkdir ~/.ypi
     cd ~/.ypi
     git clone git://github.com/yonpols/ypinfrastructure.git
-    echo 'export PATH=$PATH:~ypi/bin' >> ~/.bashrc
+    echo 'export PATH=$PATH:~/.ypi/bin' >> ~/.bashrc
     source ~/.bashrc
+
+    Edit php.ini and add /home/user/.ypi/lib
+    include_path = .:/home/user/.ypi/lib:....

@@ -101,25 +101,6 @@
             return $version;
     }
 
-    function loadPackageFromSsh($srcPath) {
-        $destPath = getTempPath();
-        $cmd = sprintf('scp -r "%s" "%s"', addslashes($srcPath), addslashes($destPath));
-        system($cmd, $value);
-        return ($value == 0)? $destPath: false;
-    }
-
-    function loadPackageFromGit($srcPath) {
-        $destPath = getTempPath();
-        system(sprintf('git clone "%s" "%s"', addslashes($srcPath), addslashes($destPath)), $value);
-        return ($value == 0)? $destPath: false;
-    }
-
-    function loadPackageFromFtp($srcPath) {
-        $destPath = getTempPath();
-        //system(sprintf('git clone "%s" "%s"', addslashes($srcPath), addslashes($destPath)), $value);
-        return false;//($value == 0)? $destPath: false;
-    }
-
     function recursive_copy($from, $to) {
         $dir = opendir($from);
         $result = ($dir !== false);
