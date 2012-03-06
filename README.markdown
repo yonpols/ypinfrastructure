@@ -1,6 +1,3 @@
-YPInfrastructure
-================
-
 #YPInfrastructure
 
 Package mananger to work with YPFramework and YPFramework based applications
