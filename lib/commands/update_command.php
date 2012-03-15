@@ -18,7 +18,7 @@
             }
 
             if (!is_dir(DB_PATH))
-                system(sprintf('git clone git@gist.github.com:b927e5b610572118fbf2.git %s', escapeshellarg(DB_PATH)), $result);
+                system(sprintf('git clone git://gist.github.com/2047698.git %s', escapeshellarg(DB_PATH)), $result);
             else {
                 $cwd = getcwd();
                 chdir(DB_PATH);
