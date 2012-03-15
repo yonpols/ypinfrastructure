@@ -8,7 +8,7 @@
     define('DB_PATH' , BIN_PATH.'/../db');
 
     require LIB_PATH.'/sfYaml/sfYamlParser.php';
-    require LIB_PATH.'/installer/functions.php';
+    require LIB_PATH.'/installer/Functions.php';
     require LIB_PATH.'/installer/YPILogger.php';
     require LIB_PATH.'/installer/YPIPackage.php';
     require LIB_PATH.'/installer/YPICommand.php';

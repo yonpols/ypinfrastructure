@@ -9,5 +9,5 @@ if mkdir -p $DEST_PATH && git clone git://github.com/yonpols/ypinfrastructure.gi
     echo 'export PATH=$PATH:$DEST_PATH/bin' >> ~/.bashrc
     source ~/.bashrc
     echo "YPInfrastructure installed correctly"
-    echo "Please add '$DEST_PATH' to your php include path"
+    echo "Please add '$DEST_PATH/bin' to your php include path"
 fi
