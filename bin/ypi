@@ -24,7 +24,7 @@
     function run_command($name, $parameters = array()) {
         $command = YPICommand::get($name);
         if ($command === false)
-            die ("invalid ypf installation\n");
+            die ("invalid command\n");
 
         $result = $command->run($parameters);
 

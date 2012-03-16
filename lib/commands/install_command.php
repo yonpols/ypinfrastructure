@@ -11,7 +11,7 @@
                  "Install a package on the current ypi repository\n".
                  "Package path may be a file system path, a git repository (git:// prefix),\n".
                  "a ssh path (ssh:// prefix), a ftp path (ftp:// prefix), a http resource \n".
-                 "(http:// or https:// prefix)";
+                 "(http:// or https:// prefix)\n";
 
             return YPICommand::RESULT_OK;
         }
