@@ -17,6 +17,17 @@
                 $this->exitNow (self::RESULT_INVALID_PARAMETERS);
             }
 
+            echo "Updating YPInfrastructure\n";
+
+            $cwd = getcwd();
+            chdir(BASE_PATH);
+            system('git pull', $result);
+            chdir($cwd);
+            if ($result)
+                $this->exitNow (self::RESULT_FILES_ERROR, 'Couldn\'t get the updates from internet');
+
+            echo "Updating YPInfrastructure packages repositories\n";
+
             if (!is_dir(DB_PATH))
                 system(sprintf('git clone git://gist.github.com/2047698.git %s', escapeshellarg(DB_PATH)), $result);
             else {

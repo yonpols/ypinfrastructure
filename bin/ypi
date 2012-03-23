@@ -1,6 +1,7 @@
 #!/usr/bin/php
 <?php
     define('BIN_PATH', dirname(__FILE__));
+    define('BASE_PATH', dirname(BIN_PATH));
     define('LIB_PATH', realpath(BIN_PATH.'/../lib'));
     define('LOG_PATH', realpath(BIN_PATH.'/../log'));
     define('PKG_PATH', realpath(BIN_PATH.'/../pkg'));
@@ -8,6 +9,7 @@
     define('DB_PATH' , BIN_PATH.'/../db');
 
     require LIB_PATH.'/sfYaml/sfYamlParser.php';
+    require LIB_PATH.'/sfYaml/sfYamlDumper.php';
     require LIB_PATH.'/installer/Functions.php';
     require LIB_PATH.'/installer/YPILogger.php';
     require LIB_PATH.'/installer/YPIPackage.php';

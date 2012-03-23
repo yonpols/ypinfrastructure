@@ -18,8 +18,10 @@
         protected $installer;
         protected $packageRoot;
 
-        public static function listAll($type = null, $name = null, $min_version = null)
-        {
+        private $temporary;
+        private $remote;
+
+        public static function listAll($type = null, $name = null, $min_version = null) {
             $packages = array();
 
             if ($type === null)
@@ -81,21 +83,79 @@
         }
 
         public static function get($fromPath) {
-            if (is_file($fromPath)) {
-                $tempPath = getTempPath();
-                mkdir($tempPath);
+            $temporary = true;
+            $remote = true;
 
-                system(sprintf('unzip "%s" -d "%s"', $fromPath, $tempPath), $result);
+            if (substr($fromPath, 0, 7) == 'http://')
+                $tempPath = self::loadPackageFromHttp($fromPath);
+            elseif (substr($fromPath, 0, 8) == 'https://')
+                $tempPath = self::loadPackageFromHttp($fromPath);
+            elseif (substr($fromPath, 0, 6) == 'ssh://')
+                $tempPath = self::loadPackageFromSsh(substr($fromPath, 6));
+            elseif (substr($fromPath, 0, 6) == 'git://')
+                $tempPath = self::loadPackageFromGit(substr($fromPath, 6));
+            elseif (substr($fromPath, 0, 6) == 'ftp://')
+                $tempPath = self::loadPackageFromFtp(substr($fromPath, 6));
+            elseif (substr($fromPath, 0, 7) == 'file://') {
+                $tempPath = substr($fromPath, 7);
+                $temporary = false;
+                $remote = false;
+            } else {
+                $tempPath = $fromPath;
+                $temporary = false;
+                $remote = false;
+            }
+
+            if (is_file($tempPath)) {
+                $tempDestPath = getTempPath();
+                mkdir($tempDestPath);
+                $temporary = true;
+
+                system(sprintf('unzip "%s" -d "%s"', $tempPath, $tempDestPath), $result);
                 if ($result != 0) {
-                    recursive_delete($tempPath, true);
+                    recursive_delete($tempDestPath, true);
                     return false;
                 }
 
-                $fromPath = $tempPath;
+                $tempPath = $tempDestPath;
             }
 
-            $package = self::load($fromPath);
+            $package = self::load($tempPath, $temporary, $remote);
             return $package;
+        }
+
+        private static function loadPackageFromHttp($srcPath) {
+            $destPath = getTempPath();
+
+            $content = file_get_contents($srcPath);
+            if (!$content)
+                return false;
+
+            $result = file_put_contents($destPath, $content);
+
+            if ($result === false)
+                return false;
+            else
+                return $destPath;
+        }
+
+        private static function loadPackageFromSsh($srcPath) {
+            $destPath = getTempPath();
+            $cmd = sprintf('scp -r "%s" "%s"', addslashes($srcPath), addslashes($destPath));
+            system($cmd, $value);
+            return ($value == 0)? $destPath: false;
+        }
+
+        private static function loadPackageFromGit($srcPath) {
+            $destPath = getTempPath();
+            system(sprintf('git clone "%s" "%s"', addslashes($srcPath), addslashes($destPath)), $value);
+            return ($value == 0)? $destPath: false;
+        }
+
+        private static function loadPackageFromFtp($srcPath) {
+            $destPath = getTempPath();
+            //system(sprintf('git clone "%s" "%s"', addslashes($srcPath), addslashes($destPath)), $value);
+            return false;//($value == 0)? $destPath: false;
         }
 
         protected function __construct($packageRoot, $config) {
@@ -118,6 +178,11 @@
 
             if (isset($config['package']['installer']))
                 $this->installer = $config['package']['installer'];
+        }
+
+        public function __destruct() {
+            if ($this->temporary)
+                recursive_delete ($this->packageRoot, true);
         }
 
         public function getType() {
@@ -146,6 +211,10 @@
 
         public function getPackageRoot() {
             return $this->packageRoot;
+        }
+
+        public function isRemote() {
+            return $this->remote;
         }
 
         public function install($skipDependencies = false) {
@@ -347,11 +416,13 @@
             return false;
         }
 
-        private static function load($packageRoot) {
+        private static function load($packageRoot, $temporary, $remote) {
             $configFileName = getFileName($packageRoot, 'config.yml');
             if (!is_file($configFileName))
             {
                 YPILogger::log('ERROR', sprintf("%s does not point to a valid package. config.yml missing", $packageRoot));
+                if ($temporary)
+                    recursive_delete ($packageRoot, true);
                 return false;
             }
 
@@ -362,31 +433,43 @@
             }
             catch (InvalidArgumentException $e) {
                 YPILogger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
+                if ($temporary)
+                    recursive_delete ($packageRoot, true);
                 return false;
             }
 
             if (!isset($config['package'])) {
                 YPILogger::log('ERROR', sprintf("%s does not point to a valid package. config.yml corrupted", $packageRoot));
+                if ($temporary)
+                    recursive_delete ($packageRoot, true);
                 return false;
             }
 
             if (!isset($config['package']['type'])) {
                 YPILogger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not included in config.yml", $packageRoot));
+                if ($temporary)
+                    recursive_delete ($packageRoot, true);
                 return false;
             }
 
             if (array_search($config['package']['type'], self::$supportedTypes) === false) {
                 YPILogger::log('ERROR', sprintf("%s does not point to a valid package. Type of package not supported: %s", $packageRoot, $this->type));
+                if ($temporary)
+                    recursive_delete ($packageRoot, true);
                 return false;
             }
 
             if (!isset($config['package']['version'])) {
                 YPILogger::log('ERROR', sprintf("%s does not point to a valid package. Version of package not included in config.yml", $packageRoot));
+                if ($temporary)
+                    recursive_delete ($packageRoot, true);
                 return false;
             }
 
             if (!isset($config['package']['name'])) {
                 YPILogger::log('ERROR', sprintf("%s does not point to a valid package. Name of package not included in config.yml", $packageRoot));
+                if ($temporary)
+                    recursive_delete ($packageRoot, true);
                 return false;
             }
 
@@ -394,8 +477,12 @@
                 $type = $config['package']['type'];
                 $class = 'YPI'.strtoupper($type[0]).substr($type, 1).'Package';
                 $package = new $class($packageRoot, $config);
+                $package->temporary = $temporary;
+                $package->remote = $remote;
                 return $package;
             } catch (Exception $e) {
+                if ($temporary)
+                    recursive_delete ($packageRoot, true);
                 return false;
             }
         }
